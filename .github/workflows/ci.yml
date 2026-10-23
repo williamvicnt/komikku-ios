@@ -58,6 +58,18 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Annotate compile errors (1-10)
+        if: failure()
+        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 0
+
+      - name: Annotate compile errors (11-20)
+        if: failure()
+        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 10
+
+      - name: Annotate compile errors (21-30)
+        if: failure()
+        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 20
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

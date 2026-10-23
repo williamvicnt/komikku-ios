@@ -87,6 +87,6 @@ struct LibraryView: View {
             .font(.subheadline)
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(selected ? Color.accentColor : Color(.secondarySystemFill), in: Capsule())
-            .foregroundStyle(selected ? .white : .primary)
+            .foregroundStyle(selected ? Color.white : Color.primary)
     }
 }

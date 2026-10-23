@@ -1,6 +1,11 @@
 import SwiftUI
 import KomikkuCore
 
+private struct SourceItem: Identifiable {
+    let source: any Source
+    var id: Int64 { source.id }
+}
+
 struct BrowseView: View {
     @Environment(\.sourceManager) private var sources
 
@@ -9,11 +14,11 @@ struct BrowseView: View {
             List {
                 ForEach(sources.languages, id: \.self) { language in
                     Section(language.isEmpty ? "Other" : language.uppercased()) {
-                        ForEach(sources.allSources.filter { $0.lang == language }, id: \.id) { source in
-                            NavigationLink(value: SourceRoute(sourceID: source.id)) {
+                        ForEach(sources.allSources.filter { $0.lang == language }.map(SourceItem.init)) { item in
+                            NavigationLink(value: SourceRoute(sourceID: item.source.id)) {
                                 VStack(alignment: .leading) {
-                                    Text(source.name)
-                                    if source.supportsLatest {
+                                    Text(item.source.name)
+                                    if item.source.supportsLatest {
                                         Text("Latest available").font(.caption).foregroundStyle(.secondary)
                                     }
                                 }

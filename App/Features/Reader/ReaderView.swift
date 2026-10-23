@@ -93,7 +93,7 @@ struct ReaderView: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
-        .scrollPosition(id: Binding(get: { current as Int? }, set: { if let $0 { current = $0 } }))
+        .scrollPosition(id: Binding(get: { current as Int? }, set: { newValue in if let newValue { current = newValue } }))
         .ignoresSafeArea()
     }
 

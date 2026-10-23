@@ -1,0 +1,153 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 0bffdcc..d460598 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -58,6 +58,18 @@ jobs:
+             echo '```'
+           } >> "$GITHUB_STEP_SUMMARY"
+ 
++      - name: Annotate compile errors (1-10)
++        if: failure()
++        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 0
++
++      - name: Annotate compile errors (11-20)
++        if: failure()
++        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 10
++
++      - name: Annotate compile errors (21-30)
++        if: failure()
++        run: python3 scripts/annotate-errors.py xcodebuild.log --offset 20
++
+       - name: Upload logs
+         if: always()
+         uses: actions/upload-artifact@v4
+diff --git a/App/Features/Browse/BrowseView.swift b/App/Features/Browse/BrowseView.swift
+index a171ae1..8904686 100644
+--- a/App/Features/Browse/BrowseView.swift
++++ b/App/Features/Browse/BrowseView.swift
+@@ -1,6 +1,11 @@
+ import SwiftUI
+ import KomikkuCore
+ 
++private struct SourceItem: Identifiable {
++    let source: any Source
++    var id: Int64 { source.id }
++}
++
+ struct BrowseView: View {
+     @Environment(\.sourceManager) private var sources
+ 
+@@ -9,11 +14,11 @@ struct BrowseView: View {
+             List {
+                 ForEach(sources.languages, id: \.self) { language in
+                     Section(language.isEmpty ? "Other" : language.uppercased()) {
+-                        ForEach(sources.allSources.filter { $0.lang == language }, id: \.id) { source in
+-                            NavigationLink(value: SourceRoute(sourceID: source.id)) {
++                        ForEach(sources.allSources.filter { $0.lang == language }.map(SourceItem.init)) { item in
++                            NavigationLink(value: SourceRoute(sourceID: item.source.id)) {
+                                 VStack(alignment: .leading) {
+-                                    Text(source.name)
+-                                    if source.supportsLatest {
++                                    Text(item.source.name)
++                                    if item.source.supportsLatest {
+                                         Text("Latest available").font(.caption).foregroundStyle(.secondary)
+                                     }
+                                 }
+diff --git a/App/Features/Library/LibraryView.swift b/App/Features/Library/LibraryView.swift
+index acb970a..a778a15 100644
+--- a/App/Features/Library/LibraryView.swift
++++ b/App/Features/Library/LibraryView.swift
+@@ -87,6 +87,6 @@ struct LibraryView: View {
+             .font(.subheadline)
+             .padding(.horizontal, 12).padding(.vertical, 6)
+             .background(selected ? Color.accentColor : Color(.secondarySystemFill), in: Capsule())
+-            .foregroundStyle(selected ? .white : .primary)
++            .foregroundStyle(selected ? Color.white : Color.primary)
+     }
+ }
+diff --git a/App/Features/Reader/ReaderView.swift b/App/Features/Reader/ReaderView.swift
+index 86dfe86..8e29e6f 100644
+--- a/App/Features/Reader/ReaderView.swift
++++ b/App/Features/Reader/ReaderView.swift
+@@ -93,7 +93,7 @@ struct ReaderView: View {
+             .scrollTargetLayout()
+         }
+         .scrollTargetBehavior(.paging)
+-        .scrollPosition(id: Binding(get: { current as Int? }, set: { if let $0 { current = $0 } }))
++        .scrollPosition(id: Binding(get: { current as Int? }, set: { newValue in if let newValue { current = newValue } }))
+         .ignoresSafeArea()
+     }
+ 
+diff --git a/scripts/annotate-errors.py b/scripts/annotate-errors.py
+new file mode 100755
+index 0000000..a853875
+--- /dev/null
++++ b/scripts/annotate-errors.py
+@@ -0,0 +1,67 @@
++#!/usr/bin/env python3
++"""Turn compiler errors from an xcodebuild log into GitHub Actions annotations.
++
++GitHub shows at most 10 error annotations per step, so the workflow calls this script
++several times with a different --offset. Annotations are visible on the run page and
++through the API (check-run annotations), which is handy when the raw log is not reachable.
++
++usage: annotate-errors.py LOGFILE [--offset N] [--limit N]
++"""
++import argparse
++import os
++import re
++import sys
++
++FILE_ERROR = re.compile(r"^(?P<path>/[^:\n]+?):(?P<line>\d+):(?P<col>\d+): error: (?P<msg>.+)$")
++BARE_ERROR = re.compile(r"^(?:xcodebuild: )?error: (?P<msg>.+)$")
++
++
++def escape(text: str) -> str:
++    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
++
++
++def collect(path: str, workspace: str):
++    seen, found = set(), []
++    with open(path, errors="replace") as handle:
++        for raw in handle:
++            line = raw.rstrip("\n")
++            m = FILE_ERROR.match(line)
++            if m:
++                rel = os.path.relpath(m["path"], workspace) if m["path"].startswith(workspace) else m["path"]
++                key = (rel, m["line"], m["msg"])
++                if key not in seen:
++                    seen.add(key)
++                    found.append((rel, int(m["line"]), int(m["col"]), m["msg"]))
++                continue
++            b = BARE_ERROR.match(line)
++            if b:
++                key = (None, None, b["msg"])
++                if key not in seen:
++                    seen.add(key)
++                    found.append((None, None, None, b["msg"]))
++    return found
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("log")
++    parser.add_argument("--offset", type=int, default=0)
++    parser.add_argument("--limit", type=int, default=10)
++    args = parser.parse_args()
++
++    if not os.path.exists(args.log):
++        return 0
++    workspace = os.environ.get("GITHUB_WORKSPACE", os.getcwd()).rstrip("/") + "/"
++    errors = collect(args.log, workspace)
++    if args.offset == 0:
++        print(f"Found {len(errors)} distinct compiler error(s)", file=sys.stderr)
++    for rel, line, col, msg in errors[args.offset:args.offset + args.limit]:
++        if rel:
++            print(f"::error file={rel},line={line},col={col},title=Compile error::{escape(msg)}")
++        else:
++            print(f"::error title=Build error::{escape(msg)}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
