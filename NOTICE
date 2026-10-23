@@ -1,0 +1,10 @@
+Komikku for iOS (unofficial port)
+
+This project is a derivative work of Komikku (https://github.com/komikku-app/komikku),
+licensed under the Apache License 2.0 (see LICENSE). Komikku itself is a fork of Mihon
+(https://github.com/mihonapp/mihon) and TachiyomiSY, also Apache 2.0.
+
+Ported concepts: the source contract (source-api), model fields, source ID generation,
+and the database schema (mangas, chapters, categories, history). The code is a clean
+Swift reimplementation and has not been tested against Komikku's Android build.
+This project is not affiliated with or endorsed by the Komikku, Mihon or Tachiyomi projects.
